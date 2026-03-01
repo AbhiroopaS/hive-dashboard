@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
-import random
+import requests
 
 # ----------------------------
 # PAGE CONFIG
@@ -13,35 +13,62 @@ import random
 
 st.set_page_config(page_title="Smart Hive System", layout="wide")
 
-st.image("hive_banner.png", use_container_width=True)
 st.title("🐝 Smart Hive Monitoring & Treatment System")
-st.markdown("### AI-Based Varroa Mite Detection & Smart Treatment Recommendation")
+st.markdown("### AI-Based Varroa Mite Detection + Weather-Based Treatment Decision")
 
 # ----------------------------
-# LOAD MODEL
+# LOAD YOLO MODEL
 # ----------------------------
 
 @st.cache_resource
 def load_model():
-    return YOLO("best.pt")
+    return YOLO("best.pt")  # Make sure best.pt is in same folder
 
 model = load_model()
 
 # ----------------------------
-# SIDEBAR INPUTS
+# WEATHER FUNCTION
 # ----------------------------
 
-st.sidebar.header("🌍 Overall Hive Conditions")
+def get_weather(city, api_key):
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+        return data["main"]["temp"], data["main"]["humidity"]
+    return None, None
+
+# ----------------------------
+# SIDEBAR SETTINGS
+# ----------------------------
+
+st.sidebar.header("🌍 Hive Environmental Conditions")
 
 region = st.sidebar.text_input("Region", "Chennai")
-season = st.sidebar.selectbox("Season", ["Spring", "Summer", "Autumn", "Winter"])
-temperature = st.sidebar.number_input("Temperature (°C)", 0.0, 60.0, 30.0)
-humidity = st.sidebar.number_input("Humidity (%)", 0.0, 100.0, 60.0)
-brood_presence = st.sidebar.selectbox("Brood Presence", ["Yes", "No"])
+api_key = st.sidebar.text_input("OpenWeather API Key", type="password")
 
-if st.sidebar.button("Simulate Live Sensor Data"):
-    temperature = random.randint(25, 40)
-    humidity = random.randint(40, 80)
+if st.sidebar.button("🌦 Auto Fetch Weather"):
+    if api_key:
+        temp, hum = get_weather(region, api_key)
+        if temp:
+            st.sidebar.success("Weather fetched successfully ✅")
+            temperature = temp
+            humidity = hum
+        else:
+            st.sidebar.error("Weather fetch failed ❌")
+            temperature = 30.0
+            humidity = 60.0
+    else:
+        st.sidebar.warning("Enter API Key")
+        temperature = 30.0
+        humidity = 60.0
+else:
+    temperature = 30.0
+    humidity = 60.0
+
+temperature = st.sidebar.number_input("Temperature (°C)", 0.0, 60.0, float(temperature))
+humidity = st.sidebar.number_input("Humidity (%)", 0.0, 100.0, float(humidity))
 
 # ----------------------------
 # SESSION STORAGE
@@ -50,136 +77,183 @@ if st.sidebar.button("Simulate Live Sensor Data"):
 if "history" not in st.session_state:
     st.session_state.history = []
 
-hive_ids = ["I1", "I2"]
+# ----------------------------
+# HIVE SETTINGS
+# ----------------------------
+
+num_hives = st.sidebar.number_input("Number of Hives", 1, 10, 2)
+hive_ids = [f"Hive_{i+1}" for i in range(num_hives)]
 
 # ----------------------------
 # TREATMENT LOGIC
 # ----------------------------
 
-def recommend_treatment(total_mites, total_images, temp):
+def recommend_treatment(total_mites, temp):
 
-    if total_images == 0:
-        return "NO DATA", "No Treatment", "Upload images first."
+    if total_mites <= 2:
+        return "LOW 🟢", "Preventive Care", "Sugar dusting or low-dose Thymol"
 
-    mites_per_10 = total_mites
-
-    if mites_per_10 <= 2:
-        infection = "LOW 🟢"
-        treatment = "Preventive Care"
-        note = "Use sugar dusting or low-dose Thymol as precaution."
-
-    elif 3 <= mites_per_10 <= 5:
-        infection = "MEDIUM 🟡"
+    elif 3 <= total_mites <= 5:
         if 15 <= temp <= 30:
-            treatment = "Thymol (12–15 g)"
-            note = "Repeat after 14 days."
+            return "MEDIUM 🟡", "Thymol (12–15 g)", "Repeat after 14 days"
         else:
-            treatment = "Thymol (Temp Warning)"
-            note = "Best applied between 15–30°C."
+            return "MEDIUM 🟡", "Thymol (Temp Warning)", "Best between 15–30°C"
 
     else:
-        infection = "HIGH 🔴"
         if 10 <= temp <= 25:
-            treatment = "Formic Acid (60–65%)"
-            note = "40–50 mL for 7–14 days."
+            return "HIGH 🔴", "Formic Acid (60–65%)", "40–50 mL for 7–14 days"
         else:
-            treatment = "Formic Acid (Temp Warning)"
-            note = "Optimal range 10–25°C."
-
-    return infection, treatment, note
+            return "HIGH 🔴", "Formic Acid (Temp Warning)", "Optimal 10–25°C"
 
 # ----------------------------
-# SIMPLE INFECTION DISPLAY
+# INFECTION DISPLAY
 # ----------------------------
 
 def infection_display(mites):
-
     st.write("### 🧪 Infection Severity (Scale 0–10)")
-
     progress = min(mites / 10, 1.0)
 
     if mites <= 2:
-        st.success(f"🟢 LOW Infection ({mites}/10)")
+        st.success(f"LOW Infection ({mites}/10)")
     elif 3 <= mites <= 5:
-        st.warning(f"🟡 MEDIUM Infection ({mites}/10)")
+        st.warning(f"MEDIUM Infection ({mites}/10)")
     else:
-        st.error(f"🔴 HIGH Infection ({mites}/10)")
+        st.error(f"HIGH Infection ({mites}/10)")
 
     st.progress(progress)
 
-# ----------------------------
+# ============================
 # HIVE PROCESSING
-# ----------------------------
+# ============================
 
 for hive in hive_ids:
 
     st.markdown("---")
-    st.subheader(f"🏠 Hive {hive}")
+    st.subheader(f"🏠 {hive}")
 
-    uploaded_files = st.file_uploader(
-        f"Upload images for Hive {hive}",
-        type=["jpg", "png", "jpeg"],
-        accept_multiple_files=True,
-        key=hive
+    capture_count = st.number_input(
+        f"Number of Bees (default 5)",
+        min_value=1,
+        max_value=20,
+        value=5,
+        key=f"{hive}_count"
+    )
+
+    mode = st.radio(
+        "Select Image Source",
+        ["📂 Upload Images", "📷 Use Camera"],
+        key=f"{hive}_mode"
     )
 
     total_mites = 0
+    total_images = 0
 
-    if uploaded_files:
+    # ------------------------
+    # FILE UPLOAD
+    # ------------------------
 
-        cols = st.columns(4)
+    if mode == "📂 Upload Images":
 
-        for idx, uploaded_file in enumerate(uploaded_files):
-
-            file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-            image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-
-            results = model(image)
-            annotated = results[0].plot()
-            annotated = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
-
-            mite_count = 0
-            for box in results[0].boxes:
-                class_id = int(box.cls[0])
-                class_name = model.names[class_id]
-                if class_name.lower() == "mite":
-                    mite_count += 1
-
-            total_mites += mite_count
-            cols[idx % 4].image(annotated, width=180)
-
-        infection, treatment, note = recommend_treatment(
-            total_mites,
-            len(uploaded_files),
-            temperature
+        uploaded_files = st.file_uploader(
+            f"Upload images for {hive}",
+            type=["jpg", "png", "jpeg"],
+            accept_multiple_files=True,
+            key=f"{hive}_upload"
         )
 
-        st.write(f"🦠 Total Mites (per {len(uploaded_files)} bees): {total_mites}")
+        if uploaded_files:
 
+            cols = st.columns(4)
+
+            for idx, uploaded_file in enumerate(uploaded_files):
+
+                file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+                image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+                results = model(image)
+                annotated = results[0].plot()
+                annotated = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+
+                mite_count = 0
+                for box in results[0].boxes:
+                    class_id = int(box.cls[0])
+                    class_name = model.names[class_id]
+                    if class_name.lower() == "mite":
+                        mite_count += 1
+
+                total_mites += mite_count
+                total_images += 1
+                cols[idx % 4].image(annotated, width=180)
+
+    # ------------------------
+    # CAMERA MODE
+    # ------------------------
+
+    if mode == "📷 Use Camera":
+
+        st.info(f"Capture {capture_count} bee images")
+
+        for i in range(capture_count):
+
+            camera_image = st.camera_input(
+                f"Capture Bee {i+1}",
+                key=f"{hive}_camera_{i}"
+            )
+
+            if camera_image:
+
+                image = cv2.imdecode(
+                    np.frombuffer(camera_image.getvalue(), np.uint8),
+                    cv2.IMREAD_COLOR
+                )
+
+                results = model(image)
+                annotated = results[0].plot()
+                annotated = cv2.cvtColor(annotated, cv2.COLOR_BGR2RGB)
+
+                mite_count = 0
+                for box in results[0].boxes:
+                    class_id = int(box.cls[0])
+                    class_name = model.names[class_id]
+                    if class_name.lower() == "mite":
+                        mite_count += 1
+
+                total_mites += mite_count
+                total_images += 1
+
+                st.image(annotated, caption=f"Mites: {mite_count}", width=300)
+
+                if st.button(f"🔄 Retake Bee {i+1}", key=f"{hive}_retake_{i}"):
+                    st.rerun()
+
+    # ------------------------
+    # SHOW RESULTS
+    # ------------------------
+
+    if total_images > 0:
+
+        infection, treatment, note = recommend_treatment(total_mites, temperature)
+
+        st.write(f"🦠 Total Mites (per {total_images} bees): {total_mites}")
         infection_display(total_mites)
 
         st.write(f"⚠ Infection Level: {infection}")
         st.write(f"🧪 Recommended Treatment: {treatment}")
         st.write(f"📌 Note: {note}")
 
-        if infection == "LOW 🟢":
-            st.warning("⚠ Low infection – Preventive treatment advised.")
-        elif infection == "MEDIUM 🟡":
-            st.warning("⚠ Moderate infection – Treatment required.")
-        else:
-            st.error("🚨 HIGH INFECTION – Immediate treatment required!")
-
         st.session_state.history.append({
             "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Hive ID": hive,
-            "Mites (per 10 bees)": total_mites,
+            "Total Mites": total_mites,
             "Infection": infection,
-            "Treatment": treatment
+            "Treatment": treatment,
+            "Temperature": temperature,
+            "Humidity": humidity
         })
 
-# ----------------------------
+# ============================
 # HISTORY SECTION
-# ----------------------------
+# ============================
 
 st.markdown("---")
 st.header("📊 Hive History & Analytics")
@@ -188,21 +262,15 @@ history_df = pd.DataFrame(st.session_state.history)
 
 if not history_df.empty:
 
-    selected_hive = st.selectbox("Select Hive for Trend", hive_ids)
+    st.line_chart(history_df.set_index("Date")["Total Mites"])
 
-    hive_trend = history_df[history_df["Hive ID"] == selected_hive]
-
-    if not hive_trend.empty:
-        st.line_chart(hive_trend.set_index("Date")["Mites (per 10 bees)"])
-
-    st.subheader("🧪 Treatment History Log")
     st.dataframe(history_df, use_container_width=True)
 
     output = BytesIO()
     history_df.to_excel(output, index=False)
 
     st.download_button(
-        label="📥 Download Full Historical Report",
+        label="📥 Download Hive Report",
         data=output.getvalue(),
         file_name="Hive_Report.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
