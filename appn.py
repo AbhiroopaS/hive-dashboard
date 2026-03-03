@@ -90,7 +90,7 @@ hive_ids = [f"Hive_{i+1}" for i in range(num_hives)]
 
 def recommend_treatment(total_mites, total_bees, temp, season, brood_status):
 
-    infection_percent = (total_mites / total_bees) * 100
+    infection_percent = (total_mites / total_bees) * 10
 
     # LOW
     if infection_percent < 3:
@@ -320,4 +320,5 @@ if not history_df.empty:
     )
 else:
     st.info("No hive data recorded yet.")
+
 
