@@ -85,7 +85,7 @@ num_hives = st.sidebar.number_input("Number of Hives", 1, 10, 2)
 hive_ids = [f"Hive_{i+1}" for i in range(num_hives)]
 
 # ----------------------------
-# UPDATED TREATMENT LOGIC
+# TREATMENT LOGIC
 # ----------------------------
 
 def recommend_treatment(total_mites, total_bees, temp, season, brood_status):
@@ -183,7 +183,7 @@ for hive in hive_ids:
     st.subheader(f"🏠 {hive}")
 
     capture_count = st.number_input(
-        f"Number of Bees (default 5)",
+        "Number of Bees (default 5)",
         min_value=1,
         max_value=20,
         value=5,
@@ -278,3 +278,45 @@ for hive in hive_ids:
         st.write(f"**Duration:** {treatment_data['Duration']}")
         st.write(f"**Brood Compatibility:** {treatment_data['Brood Safe']}")
         st.write(f"**Warning:** {treatment_data['Warning']}")
+
+        st.session_state.history.append({
+            "Date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Hive ID": hive,
+            "Total Mites": total_mites,
+            "Infection %": round(percent, 2),
+            "Infection Level": level,
+            "Treatment": treatment_data["Treatment"],
+            "Temperature": temperature,
+            "Humidity": humidity,
+            "Season": season,
+            "Brood Status": brood_status
+        })
+
+# ----------------------------
+# HISTORY SECTION
+# ----------------------------
+
+st.markdown("---")
+st.header("📊 Hive History & Analytics")
+
+history_df = pd.DataFrame(st.session_state.history)
+
+if not history_df.empty:
+
+    history_df["Date"] = pd.to_datetime(history_df["Date"])
+    history_df = history_df.sort_values("Date")
+
+    st.line_chart(history_df.set_index("Date")["Infection %"])
+    st.dataframe(history_df, use_container_width=True)
+
+    output = BytesIO()
+    history_df.to_excel(output, index=False)
+
+    st.download_button(
+        label="📥 Download Hive Report",
+        data=output.getvalue(),
+        file_name="Hive_Report.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+else:
+    st.info("No hive data recorded yet.")
