@@ -12,7 +12,7 @@ import requests
 # ----------------------------
 
 st.set_page_config(page_title="Smart Hive System", layout="wide")
-st.image("hive_banner.png", use_container_width=True)
+st.image("hive_banner.png", width=800)
 st.title("🐝 Smart Hive Monitoring & Treatment System")
 st.markdown("### AI-Based Varroa Mite Detection + Weather-Based Treatment Decision")
 
@@ -320,6 +320,7 @@ if not history_df.empty:
     )
 else:
     st.info("No hive data recorded yet.")
+
 
 
 
