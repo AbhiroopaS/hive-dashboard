@@ -1,9 +1,10 @@
-streamlit==1.33.0
+streamlit==1.32.0
 ultralytics==8.2.0
 opencv-python-headless==4.9.0.80
-numpy
+numpy==1.26.4
 pandas
+Pillow
 requests
 openpyxl
-torch==2.1.2
-torchvision==0.16.2
+torch
+torchvision
