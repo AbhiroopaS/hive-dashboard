@@ -295,6 +295,9 @@ for hive in hive_ids:
 # ----------------------------
 # HISTORY SECTION
 # ----------------------------
+# ----------------------------
+# HISTORY SECTION
+# ----------------------------
 
 st.markdown("---")
 st.header("📊 Hive History & Analytics")
@@ -303,10 +306,25 @@ history_df = pd.DataFrame(st.session_state.history)
 
 if not history_df.empty:
 
-    history_df["Date"] = pd.to_datetime(history_df["Date"])
+    # Convert to datetime and adjust to IST
+    history_df["Date"] = pd.to_datetime(history_df["Date"]) + pd.Timedelta(hours=5, minutes=30)
+
     history_df = history_df.sort_values("Date")
 
-    st.line_chart(history_df.set_index("Date")["Infection %"])
+    # Hive selection option
+    hive_view = st.selectbox(
+        "Select Hive for Infection Analysis",
+        ["All Hives"] + list(history_df["Hive ID"].unique())
+    )
+
+    if hive_view == "All Hives":
+        graph_df = history_df
+    else:
+        graph_df = history_df[history_df["Hive ID"] == hive_view]
+
+    st.subheader("📈 Infection Trend (IST Time)")
+    st.line_chart(graph_df.set_index("Date")["Infection %"])
+
     st.dataframe(history_df, use_container_width=True)
 
     output = BytesIO()
@@ -318,12 +336,9 @@ if not history_df.empty:
         file_name="Hive_Report.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
+
 else:
     st.info("No hive data recorded yet.")
-
-
-
-
 
 
 
